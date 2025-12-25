@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>TitanFusion Dashboard</title>
+</head>
+<body>
+  <h1>TitanFusion Dashboard</h1>
+  <button onclick="loadStatus()">Check Status</button>
+  <pre id="out"></pre>
+
+<script>
+function loadStatus(){
+ fetch("/status", {
+   headers: {"X-API-Key":"CHANGE_ME"}
+ }).then(r=>r.json()).then(d=>{
+   document.getElementById("out").innerText =
+     JSON.stringify(d,null,2);
+ });
+}
+</script>
+</body>
+</html>
