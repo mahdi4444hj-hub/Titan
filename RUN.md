@@ -13,3 +13,4 @@
 ## Notes
 - Configuration: config.yaml
 - Core entrypoint: core/api.py
+- «HTTPS فعال است و از certs/ استفاده می‌کند».
