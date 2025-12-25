@@ -1,1 +1,23 @@
 
+app:
+  name: TitanFusion
+  mode: production
+  auto_update: false
+
+security:
+  api_key_required: true
+  ip_whitelist_enabled: true
+  rate_limit:
+    enabled: true
+    adaptive_cpu: true
+  geo_ip_block:
+    enabled: true
+
+dashboard:
+  enabled: true
+  https: true
+  port: 8443
+
+logging:
+  level: info
+  daily_reports: true
