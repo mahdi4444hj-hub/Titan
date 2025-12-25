@@ -1,3 +1,24 @@
+import time
+
+RATE_LIMIT = 60  # req/min per IP
+BLOCKED_COUNTRIES = {"CN", "RU"}  # مثال
+requests = {}
+
+def rate_limited(ip):
+    now = time.time()
+    window = 60
+    reqs = requests.get(ip, [])
+    reqs = [t for t in reqs if now - t < window]
+    if len(reqs) >= RATE_LIMIT:
+        return True
+    reqs.append(now)
+    requests[ip] = reqs
+    return False
+    
+def geo_block(ip):
+    # ساده‌سازی: فعلاً دستی/Placeholder
+    return False
+
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import hashlib
