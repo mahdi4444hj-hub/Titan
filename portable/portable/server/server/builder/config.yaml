@@ -21,3 +21,7 @@ dashboard:
 logging:
   level: info
   daily_reports: true
+https:
+  enabled: false
+  cert: certs/server.crt
+  key: certs/server.key
