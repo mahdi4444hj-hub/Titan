@@ -25,3 +25,6 @@ https:
   enabled: false
   cert: certs/server.crt
   key: certs/server.key
+geoip:
+  enabled: false
+  db: geoip/GeoLite2.mmdb
