@@ -28,3 +28,7 @@ https:
 geoip:
   enabled: false
   db: geoip/GeoLite2.mmdb
+
+ai:
+  enabled: false
+
