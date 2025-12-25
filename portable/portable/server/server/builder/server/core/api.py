@@ -1,141 +1,110 @@
-from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
-import hashlib
 import time
+import socketserver
+from http.server import BaseHTTPRequestHandler
+from collections import defaultdict
 
-# ================= CONFIG =================
-API_KEY = "CHANGE_ME"
-RATE_LIMIT = 60  # requests per minute per IP
+# ======================
+# Security Config
+# ======================
+RATE_LIMIT = 60  # requests per minute
+BLOCKED_COUNTRIES = {"CN", "RU", "KP"}  # نمونه
+REQUEST_LOG = defaultdict(list)
+BLOCKED_IPS = set()
 
-USERS = {
-    "admin@local": hashlib.sha256("admin123".encode()).hexdigest()
-}
+# ======================
+# Simple Geo-IP (Mock)
+# ======================
+def get_country_from_ip(ip):
+    if ip.startswith("127.") or ip.startswith("192."):
+        return "LOCAL"
+    return "UNKNOWN"
 
-SUSPICIOUS_PATHS = {"/admin", "/wp-login", "/phpmyadmin"}
-
-# ================= MEMORY =================
-requests_log = {}
-blocked_ips = set()
-
-# ================= SECURITY =================
-def check_auth(email, password):
-    if not email or not password:
-        return False
-    h = hashlib.sha256(password.encode()).hexdigest()
-    return USERS.get(email) == h
-
-
-def rate_limited(ip):
+# ======================
+# Rate Limiter
+# ======================
+def is_rate_limited(ip):
     now = time.time()
-    window = 60
-    log = requests_log.get(ip, [])
-    log = [t for t in log if now - t < window]
-    if len(log) >= RATE_LIMIT:
+    REQUEST_LOG[ip] = [t for t in REQUEST_LOG[ip] if now - t < 60]
+    REQUEST_LOG[ip].append(now)
+    return len(REQUEST_LOG[ip]) > RATE_LIMIT
+
+# ======================
+# Basic WAF / AI-like Detection
+# ======================
+def is_malicious(path, headers):
+    suspicious_keywords = ["../", "<script", "select *", "union", "%00"]
+    for key in suspicious_keywords:
+        if key.lower() in path.lower():
+            return True
+    user_agent = headers.get("User-Agent", "")
+    if user_agent == "":
         return True
-    log.append(now)
-    requests_log[ip] = log
     return False
 
-
-def ai_detect(path, ip):
-    if path in SUSPICIOUS_PATHS:
-        blocked_ips.add(ip)
-        return True
-    return False
-
-
-# ================= DASHBOARD =================
-DASHBOARD_HTML = """
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>TitanFusion Dashboard</title>
-</head>
-<body>
-<h2>TitanFusion Secure Dashboard</h2>
-<button onclick="check()">Check Status</button>
-<pre id="out">---</pre>
-
-<script>
-function check(){
- fetch("/status", {
-  headers:{
-   "X-API-Key":"CHANGE_ME",
-   "X-Email":"admin@local",
-   "X-Password":"admin123"
-  }
- }).then(r=>r.json()).then(d=>{
-   document.getElementById("out").innerText =
-    JSON.stringify(d,null,2)
- }).catch(e=>{
-   document.getElementById("out").innerText = "ACCESS DENIED";
- })
-}
-</script>
-</body>
-</html>
-"""
-
-# ================= HANDLER =================
+# ======================
+# HTTP Handler
+# ======================
 class TitanHandler(BaseHTTPRequestHandler):
 
-    def deny(self, code):
+    def _block(self, code=403, msg="Blocked"):
         self.send_response(code)
+        self.send_header("Content-Type", "application/json")
         self.end_headers()
+        self.wfile.write(json.dumps({"status": "blocked", "reason": msg}).encode())
 
     def do_GET(self):
-        ip = self.client_address[0]
+        client_ip = self.client_address[0]
 
-        # Permanent Block
-        if ip in blocked_ips:
-            return self.deny(403)
+        # ---- Global IP Block ----
+        if client_ip in BLOCKED_IPS:
+            return self._block(403, "IP blacklisted")
 
-        # Rate Limit
-        if rate_limited(ip):
-            return self.deny(429)
+        # ---- Rate Limit ----
+        if is_rate_limited(client_ip):
+            BLOCKED_IPS.add(client_ip)
+            return self._block(429, "Rate limit exceeded")
 
-        # AI / WAF
-        if ai_detect(self.path, ip):
-            return self.deny(403)
+        # ---- Geo-IP Block ----
+        country = get_country_from_ip(client_ip)
+        if country in BLOCKED_COUNTRIES:
+            BLOCKED_IPS.add(client_ip)
+            return self._block(403, "Geo blocked")
 
-        # API Key
-        if self.headers.get("X-API-Key") != API_KEY:
-            return self.deny(403)
+        # ---- WAF / AI Detection ----
+        if is_malicious(self.path, self.headers):
+            BLOCKED_IPS.add(client_ip)
+            return self._block(403, "Malicious request detected")
 
-        # Login
-        email = self.headers.get("X-Email")
-        password = self.headers.get("X-Password")
-        if not check_auth(email, password):
-            return self.deny(401)
-
+        # ======================
         # Routes
-        if self.path in ("/", "/dashboard"):
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html")
-            self.end_headers()
-            self.wfile.write(DASHBOARD_HTML.encode())
-
-        elif self.path == "/status":
+        # ======================
+        if self.path == "/":
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(json.dumps({
+                "service": "TitanFusion API",
                 "status": "running",
-                "service": "TitanFusion",
-                "security": "active",
-                "blocked_ips": len(blocked_ips)
+                "ip": client_ip
             }).encode())
+
+        elif self.path == "/health":
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"OK")
+
         else:
-            self.deny(404)
+            self.send_response(404)
+            self.end_headers()
 
-
-# ================= RUN =================
-def run(port=8443):
-    server = HTTPServer(("", port), TitanHandler)
-    print(f"TitanFusion running on port {port}")
-    server.serve_forever()
-
+# ======================
+# Server Bootstrap
+# ======================
+def run_server(port=8080):
+    with socketserver.ThreadingTCPServer(("", port), TitanHandler) as httpd:
+        print(f"[TitanFusion] Secure API running on port {port}")
+        httpd.serve_forever()
 
 if __name__ == "__main__":
-    run()
+    run_server()
