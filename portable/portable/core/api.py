@@ -25,6 +25,10 @@ GEOIP_ENABLED = False
 def check_geoip(ip):
     return True  # later: real country check
 
+# ---------- AI Detection (placeholder) ----------
+AI_ENABLED = False
+def ai_detect(ip, path):
+    return False  # later: real AI logic
 # ---------- HTTP Handler ----------
 class TitanHandler(BaseHTTPRequestHandler):
     def _json(self, code, payload):
