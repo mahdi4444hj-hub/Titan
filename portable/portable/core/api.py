@@ -20,10 +20,13 @@ def is_rate_limited(ip):
     key = f"{ip}:{minute}"
     REQUESTS[key] = REQUESTS.get(key, 0) + 1
     return REQUESTS[key] > RATE_LIMIT
+# ---------- Geo-IP (placeholder) ----------
+GEOIP_ENABLED = False
+def check_geoip(ip):
+    return True  # later: real country check
 
 # ---------- HTTP Handler ----------
 class TitanHandler(BaseHTTPRequestHandler):
-
     def _json(self, code, payload):
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
