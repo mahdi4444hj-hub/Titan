@@ -57,7 +57,6 @@ class TitanHandler(BaseHTTPRequestHandler):
                 "version": "0.1.0"
             })
             return
-
         logger.warning("route not found", extra={"path": self.path})
         self._json(404, {"error": "not found"})
 
