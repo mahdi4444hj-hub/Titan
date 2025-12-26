@@ -2,21 +2,22 @@ import logging.config
 import yaml
 import json
 import time
+import ssl
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-# ---------- Logging ----------
+# ---------- Load Logging ----------
 with open("logging.yaml", "r", encoding="utf-8") as f:
     logging.config.dictConfig(yaml.safe_load(f))
 
 logger = logging.getLogger("titan")
 
-# ---------- Simple Rate Limit ----------
+# ---------- Rate Limit (basic) ----------
 REQUESTS = {}
-RATE_LIMIT = 60  # requests per minute per IP
+RATE_LIMIT = 60  # per minute per IP
 
 def is_rate_limited(ip):
-    now_min = int(time.time() / 60)
-    key = f"{ip}:{now_min}"
+    minute = int(time.time() / 60)
+    key = f"{ip}:{minute}"
     REQUESTS[key] = REQUESTS.get(key, 0) + 1
     return REQUESTS[key] > RATE_LIMIT
 
@@ -53,10 +54,16 @@ class TitanHandler(BaseHTTPRequestHandler):
         logger.warning("route not found", extra={"path": self.path})
         self._json(404, {"error": "not found"})
 
-# ---------- Server ----------
-def run(host="0.0.0.0", port=8080):
+# ---------- HTTPS Server ----------
+def run(host="0.0.0.0", port=8443):
     server = HTTPServer((host, port), TitanHandler)
-    logger.info("Titan API started", extra={"host": host, "port": port})
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(
+        certfile="certs/server.crt",
+        keyfile="certs/server.key"
+    )
+    server.socket = context.wrap_socket(server.socket, server_side=True)
+    logger.info("Titan HTTPS started", extra={"host": host, "port": port})
     server.serve_forever()
 
 if __name__ == "__main__":
